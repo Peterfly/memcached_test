@@ -4,6 +4,17 @@
 #include <libmemcached/memcached.h>
 #include <sys/time.h>
 #include <time.h>
+
+void print_all(memcached_stat_st *stat, FILE *file) {
+    fprintf(file, "pid: %lu\n", stat->pid);
+    fprintf(file, "uptime: %lu\n", stat->uptime);
+    fprintf(file, "time: %lu\n", stat->time);
+    fprintf(file, "pointer_size: %d\n", stat->pointer_size);
+    fprintf(file, "rusage_user: %d\n", stat->rusage_user);
+}
+
+
+
 void proc(FILE *result) {
   FILE *fs = fopen("/proc/meminfo", "r");
   char temp[100] = {};

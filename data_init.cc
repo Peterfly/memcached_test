@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
     char *retvalue = NULL;
     size_t retlength;
     uint32_t flags;
-    char base_addr[12] = "10.0.0.%d";  
+    char ip_addr[12] = "10.0.0.%d";  
     /* By default, port starts from 11211. */
     int port = 11211;
     if (argc < 3) {
@@ -38,16 +38,16 @@ int main(int argc, char *argv[])
     int core_id = atoi(argv[1]);
     int num_test = atoi(argv[2]);
     if (argc > 3) {
-        strcpy(base_addr, argv[3]);
+        strcpy(ip_addr, argv[3]);
     }
     if (argc > 4) {
         port = atoi(argv[4]);
     }
 
     char addr[12];
-    sprintf(addr, base_addr, core_id);
+    sprintf(addr, ip_addr, core_id + 1);
     fprintf(stderr, "added server: %s\n", addr);
-    servers = memcached_server_list_append(servers, addr, port + i, &rc);
+    servers = memcached_server_list_append(servers, addr, port + core_id, &rc);
     /* Update the memcached structure with the updated server list. */
     rc = memcached_server_push(memc, servers);
     if (rc == MEMCACHED_SUCCESS)
@@ -78,8 +78,8 @@ int main(int argc, char *argv[])
             break;
         }
     }
-    temp = "done";
-    value = "done";
+    strcpy(temp, "done");
+    strcpy(value, "done");
     rc = memcached_set(memc, temp, strlen(temp), value, strlen(value), (time_t)0, (uint32_t)0);
     if (rc == MEMCACHED_SUCCESS) {
         fprintf(stderr, "Successfully initialized servers.\n");

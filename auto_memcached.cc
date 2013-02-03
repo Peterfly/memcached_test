@@ -8,7 +8,6 @@
 #define MISS_PENALTY 2
 
 void check_sum(char value[], int len, FILE *file, int core_id) {
-    if 
     for (int i = 0; i < len; i++) {
         char correct = ((i + core_id) * len) % 26 + 65;
         if (correct != value[i]) {
@@ -53,12 +52,11 @@ int main(int argc, char *argv[])
     size_t retlength;                                                                                                                     
     uint32_t flags;                     
 
-    char base_addr[12] = "10.0.0.%d";  
+    char ip_addr[12] = "10.0.0.%d";  
     /* By default, port starts from 11211. */
     int port = 11211;
     if (argc < 3) {
-        printf("Usage: %s [number of servers] [times for random access-1 for infinite] " 
-            + "[is checking sum? 1 for yes] [base addr] [miss latency] [port]", argv[0]);
+        printf("Usage: %s [number of servers] [times for random access-1 for infinite] [is checking sum? 1 for yes] [base addr] [miss latency] [port]", argv[0]);
         exit(0);
     }
 
@@ -66,12 +64,12 @@ int main(int argc, char *argv[])
     int num_test = atoi(argv[2]);
     bool is_check = (atoi(argv[3]) == 1);
     if (argc > 4) {
-        strcpy(base_addr, argv[4]);
+        strcpy(ip_addr, argv[4]);
     }
 
     int miss_penalty = 2;
     if (argc > 5) {
-        miss_penalty = atoi(argv[5])
+        miss_penalty = atoi(argv[5]);
     }
 
     if (argc > 6) {
@@ -80,7 +78,7 @@ int main(int argc, char *argv[])
 
     for (int i = 0; i < num_servers; i++) {
         char addr[12];
-        sprintf(addr, base_addr, i+1);
+        sprintf(addr, ip_addr, i+1);
         servers = memcached_server_list_append(servers, addr, port + i, &rc);
     }
     /* Update the memcached structure with the updated server list */
@@ -107,11 +105,11 @@ int main(int argc, char *argv[])
     int *key_size = (int *) malloc(num_test * sizeof(int));
     if (key_size == NULL) {
         printf("malloc failed\n");
-        return;
+        return 1;
     }
 
     while (true) {
-        temp = "done";
+        strcpy(temp, "done");
         char *value = (char *) malloc(5001);
         retvalue = memcached_get(memc, temp, strlen(temp), &retlength, &flags, &rc);
         if (strcmp(temp, retvalue) == 0) {
@@ -141,7 +139,7 @@ int main(int argc, char *argv[])
                 gen_key(temp, key_size[count], rand_core);
                 gettimeofday(&tim, NULL);
                 before = tim.tv_usec;
-                rc = memcached_delete_by_key(memc, temp, strlen(temp), expire);
+                rc = memcached_delete(memc, temp, strlen(temp), expire);
                 gettimeofday(&tim, NULL);
                 after = tim.tv_usec;
             } else {
@@ -178,7 +176,7 @@ int main(int argc, char *argv[])
         } else {
             gen_miss(temp);
             retvalue = memcached_get(memc, temp, strlen(temp), &retlength, &flags, &rc);
-            sleep(MISS_PENALTY); 
+            sleep(miss_penalty); 
         }
         fscanf(timeinter, "%d\n", &interval);
         usleep(interval);
@@ -188,7 +186,6 @@ int main(int argc, char *argv[])
         }
     }
     fprintf(latency, "max: %ld min: %ld avg: %ld\n", max, min, avg/count);
-    free(temp);
     fclose(timeinter);
     fclose(myfile);
     fclose(latency);
