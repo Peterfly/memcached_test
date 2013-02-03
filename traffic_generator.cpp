@@ -111,7 +111,7 @@ void key_init(int num) {
             temp[j] = ((i + 1) * len) % 26 + 65;
         }
         fprintf(file, "%s\n", temp);*/
-        fprintf(file, "%d\n", len);
+        fprintf(file, "%d\n", len % 250);
     }
     fclose(file);
 }
@@ -120,7 +120,7 @@ void value_init(int num) {
     FILE *file = fopen("value", "a+");
     for (int i = 0; i < num; i++) {
         int temp = (int) val_pareto(gen_rand());
-        fprintf(file, "%d\n", temp);
+        fprintf(file, "%d\n", temp % 5000);
     }
     fclose(file);
 }

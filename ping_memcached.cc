@@ -76,6 +76,7 @@ int main(int argc, char *argv[]) {
     }
   }
   fclose(result_file);
+  free(stat);
   
 }
 
