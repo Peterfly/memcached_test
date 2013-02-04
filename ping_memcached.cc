@@ -6,11 +6,16 @@
 #include <time.h>
 
 void print_all(memcached_stat_st *stat, FILE *file) {
-    fprintf(file, "pid: %lu\n", stat->pid);
-    fprintf(file, "uptime: %lu\n", stat->uptime);
-    fprintf(file, "time: %lu\n", stat->time);
-    fprintf(file, "pointer_size: %d\n", stat->pointer_size);
-    fprintf(file, "rusage_user: %d\n", stat->rusage_user);
+    fprintf(file, "bytes_read: %llu\n", stat->bytes_read);
+    fprintf(stderr, "bytes_read: %llu\n", stat->bytes_read);
+    fprintf(file, "bytes_written: %llu\n", stat->bytes_written);
+    
+    fprintf(file, "time: %llu\n", stat->time);
+    fprintf(file, "get_hits: %llu\n", stat->get_hits);
+    fprintf(file, "get_misses: %llu\n", stat->get_misses);
+
+    fprintf(file, "curr_items: %llu\n", stat->curr_items);
+    fprintf(file, "total_items: %llu\n", stat->total_items);
 }
 
 
@@ -71,9 +76,8 @@ int main(int argc, char *argv[]) {
   while (true) {
     stat = memcached_stat(memc, NULL, &err);
     stamp = time(NULL);
-    printf("the time is %ld\n", time(NULL));
-    fprintf(result_file, "bytes_read: %llu\n", stat->bytes_read);
-    fprintf(result_file, "bytes_written: %llu\n", stat->bytes_written);
+    // printf("the time is %ld\n", time(NULL));
+    print_all(stat, result_file);
     stamp = time(NULL) - stamp;
     fprintf(result_file, "time stamp in sec: %ld\n", time(NULL));
     fflush(result_file);
