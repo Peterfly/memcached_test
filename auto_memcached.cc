@@ -79,7 +79,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < num_servers; i++) {
         char addr[12];
         sprintf(addr, ip_addr, i+1);
-        servers = memcached_server_list_append(servers, addr, port + i, &rc);
+        servers = memcached_server_list_append(servers, addr, port, &rc);
     }
     /* Update the memcached structure with the updated server list */
     rc = memcached_server_push(memc, servers);
