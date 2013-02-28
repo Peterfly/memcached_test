@@ -15,7 +15,7 @@ int miss_penalty = 2;
 int *key_size;
 int *inter_gap;
 int num_test;
-memcached_st *memc;
+memcached_st *memc[MAXTHREADS];
 long num_of_threads;
 int num_servers;
 char results[MAXTHREADS][100];
@@ -77,19 +77,19 @@ void *routine(void *arg) {
     size_t retlength;
     while (true) {
         printf("thread %d test: %d, total: %d\n", thread_id, count, num_test);
-	if (is_hit()) {
+	    if (is_hit()) {
             int rand_core = rand() % num_servers;
 
             if (count % 3 == 0) {
                 gen_key(temp, key_size[count], rand_core);
                 gettimeofday(&before, NULL);
-                rc = memcached_delete(memc, temp, strlen(temp), expire);
+                rc = memcached_delete(memc[thread_id], temp, strlen(temp), expire);
                 gettimeofday(&after, NULL);
             } else {
                 // printf("key size %d %d\n", key_size[count], count);
                 gen_key(temp, key_size[count], rand_core);
                 gettimeofday(&before, NULL);
-                retvalue = memcached_get(memc, temp, strlen(temp), &retlength, &flags, &rc);
+                retvalue = memcached_get(memc[thread_id], temp, strlen(temp), &retlength, &flags, &rc);
                 gettimeofday(&after, NULL);
                 // printf("got key %s\n", temp);
                 // fprintf(latency, "read %d: %ld us\n", count, after - before);
@@ -118,7 +118,7 @@ void *routine(void *arg) {
             avg += t;
         } else {
             gen_miss(temp);
-            retvalue = memcached_get(memc, temp, strlen(temp), &retlength, &flags, &rc);
+            retvalue = memcached_get(memc[thread_id], temp, strlen(temp), &retlength, &flags, &rc);
             sleep(miss_penalty); 
         }
         usleep(inter_gap[count]);
@@ -143,11 +143,14 @@ void *routine(void *arg) {
 int main(int argc, char *argv[])
 {
     memcached_server_st *servers = NULL;
-    memc = memcached_create(NULL);
+    
     time_t expire = 0;
     memcached_return rc;  
 
     num_of_threads = 4;
+
+
+    
 
     char *retvalue = NULL;                                                                                                                
     size_t retlength;
@@ -182,12 +185,18 @@ int main(int argc, char *argv[])
     }
     /* Update the memcached structure with the updated server list */
     fprintf(stderr, "added server: %s\n", addr);
-    rc = memcached_server_push(memc, servers);
-    if (rc == MEMCACHED_SUCCESS)
-        fprintf(stderr,"Successfully added server\n");
-    else
-        fprintf(stderr,"Couldn't add server: %s\n",memcached_strerror(memc, rc));
+        
+    for (int i = 0; i < num_of_threads){
+        rc = memcached_server_push(memc[i], servers);
+        if (rc == MEMCACHED_SUCCESS)
+            fprintf(stderr,"Successfully added server\n");
+        else
+            fprintf(stderr,"Couldn't add server: %s\n",memcached_strerror(memc, rc));
+    }
+        
+    
     for (int i = 0; i < num_servers; i++) {
+        memc[i] = memcached_create(NULL);
         memcached_return_t instance_rc;
         const char *hostname= servers[i].hostname;
         in_port_t port= servers[i].port;
@@ -216,19 +225,22 @@ int main(int argc, char *argv[])
         return 1;
     }
     printf("start pinging\n");
-    while (true) {
-        strcpy(temp, "done");
-        char *value = (char *) malloc(5001);
-        retvalue = memcached_get(memc, temp, strlen(temp), &retlength, &flags, &rc);
-        // printf("getting value\n");
-        if (retvalue && (strcmp(temp, retvalue) == 0)) {
-            printf("Start sampling.\n");
-            break;
-        } else {
-            printf("Waiting for initializer to complete.\n");
-            // sleep(2);
+    for (int i = 0; i < num_of_threads; i++) {
+        while (true) {
+            strcpy(temp, "done");
+            char *value = (char *) malloc(5001);
+            retvalue = memcached_get(memc[i], temp, strlen(temp), &retlength, &flags, &rc);
+            // printf("getting value\n");
+            if (retvalue && (strcmp(temp, retvalue) == 0)) {
+                printf("Start sampling.\n");
+                break;
+            } else {
+                printf("Waiting for initializer to complete.\n");
+                // sleep(2);
+            }
         }
     }
+        
 
     int i = 0;
 //    rewind(myfile);
