@@ -6,24 +6,39 @@
 #include <libmemcachedutil-1.0/ping.h>
 #include <libmemcachedutil-1.0/util.h>
 #include <sys/time.h>
-
+#include <pthread.h>
 #define HIT_RATE 81
 #define MISS_PENALTY 2
 #define MAXTHREADS 10
 
-
+int miss_penalty = 2;
 int *key_size;
 int *inter_gap;
 int num_test;
 memcached_st *memc;
-int num_of_threads;
+long num_of_threads;
 int num_servers;
 char results[MAXTHREADS][100];
 long maxes[MAXTHREADS];
 long mines[MAXTHREADS];
 float avges[MAXTHREADS];
 bool is_check;
+FILE *latency;
+uint32_t flags;                     
 
+long difftime(timeval before, timeval after) {
+    long diff = (after.tv_usec - before.tv_usec) + (after.tv_sec - before.tv_sec) * 1000000;
+    printf("diff before %d, %d after %d %d\n", before.tv_sec, before.tv_usec, after.tv_sec, after.tv_usec);
+    return diff;
+}
+
+
+bool is_hit() {
+  if (rand() % 100 <= HIT_RATE) {
+    return true;
+  }
+  return false;
+}
 void check_sum(char value[], int len, FILE *file, int core_id) {
     for (int i = 0; i < len; i++) {
         char correct = ((i + core_id) * len) % 26 + 65;
@@ -33,10 +48,24 @@ void check_sum(char value[], int len, FILE *file, int core_id) {
         }
     }
 }
+void gen_key(char temp[], int len, int core_id) {
+    for (int i = 0; i < len; i++) {
+        temp[i] = ((i + core_id) * len) % 26 + 65;
+    }
+    temp[len] = '\0';
+}
+
+void gen_miss(char key[]) {
+  int size = rand() % 240;
+  for (int i = 0; i > size; i++) {
+    key[i] = rand() % 26 + 97;
+  }
+}
 
 
 void *routine(void *arg) {
-    int thread_id = * (int *) arg;
+    memcached_return rc;  
+    long thread_id = (long) arg;
     int count = 0;
     time_t expire = 0;
     char temp[252] = {};
@@ -47,7 +76,8 @@ void *routine(void *arg) {
     char *retvalue = NULL;
     size_t retlength;
     while (true) {
-        if (is_hit()) {
+        printf("thread %d test: %d, total: %d\n", thread_id, count, num_test);
+	if (is_hit()) {
             int rand_core = rand() % num_servers;
 
             if (count % 3 == 0) {
@@ -72,7 +102,7 @@ void *routine(void *arg) {
                 }
                 fflush(latency);
             }
-            t = difftime(before, after);
+            int t = difftime(before, after);
             printf("diff time %d \n", t);
             if (count == 0) {
                 min = t;
@@ -107,33 +137,8 @@ void *routine(void *arg) {
 }
 
 
-long difftime(timeval before, timeval after) {
-    long diff = (after.tv_usec - before.tv_usec) + (after.tv_sec - before.tv_sec) * 1000000;
-    printf("diff before %d, %d after %d %d\n", before.tv_sec, before.tv_usec, after.tv_sec, after.tv_usec);
-    return diff;
-}
-
-void gen_key(char temp[], int len, int core_id) {
-    for (int i = 0; i < len; i++) {
-        temp[i] = ((i + core_id) * len) % 26 + 65;
-    }
-    temp[len] = '\0';
-}
 
 
-bool is_hit() {
-  if (rand() % 100 <= HIT_RATE) {
-    return true;
-  }
-  return false;
-}
-
-void gen_miss(char key[]) {
-  int size = rand() % 240;
-  for (int i = 0; i > size; i++) {
-    key[i] = rand() % 26 + 97;
-  }
-}
 
 int main(int argc, char *argv[])
 {
@@ -146,7 +151,6 @@ int main(int argc, char *argv[])
 
     char *retvalue = NULL;                                                                                                                
     size_t retlength;
-    uint32_t flags;                     
 
     char ip_addr[12] = "10.0.0.%d";  
     /* By default, port starts from 11211. */
@@ -163,7 +167,7 @@ int main(int argc, char *argv[])
         strcpy(ip_addr, argv[4]);
     }
 
-    int miss_penalty = 2;
+    miss_penalty = 2;
     if (argc > 5) {
         miss_penalty = atoi(argv[5]);
     }
@@ -187,12 +191,12 @@ int main(int argc, char *argv[])
         memcached_return_t instance_rc;
         const char *hostname= servers[i].hostname;
         in_port_t port= servers[i].port;
-        while (libmemcached_util_ping2(hostname, port, NULL, NULL, &instance_rc) == false);
+        // while (libmemcached_util_ping2(hostname, port, NULL, NULL, &instance_rc) == false);
     }
     char temp[252] = {};
     FILE *myfile = fopen("key", "a+");
     FILE *timeinter = fopen("inter", "a+");
-    FILE *latency = fopen("latency", "a+");
+    latency = fopen("latency", "a+");
     rewind(latency);
     rewind(myfile);
     rewind(timeinter);
@@ -229,7 +233,8 @@ int main(int argc, char *argv[])
     int i = 0;
 //    rewind(myfile);
     while (i < num_test) {
-        if (fscanf(myfile, "%d\n", &key_len) != EOF) {
+        printf("reading stuff");
+	if (fscanf(myfile, "%d\n", &key_len) != EOF) {
             key_size[i] = key_len;
         }
         if (fscanf(timeinter, "%d\n", &key_len) != EOF) {
@@ -248,15 +253,16 @@ int main(int argc, char *argv[])
 
     num_test = i;
     
-
+    int ret = 0;
     pthread_t threads[num_of_threads];
-    for (int t = 0; t < num_of_threads; t++) {
-        rc  = pthread_create(&threads[t], NULL, routine, (void *)t);
+    for (long t = 0; t < num_of_threads; t++) {
+    	printf("created thread %d total %d\n", t, num_of_threads);
+    	ret = pthread_create(&threads[t], NULL, routine, (void *)t);
     }
 
     max = maxes[0];
     min = mines[0];
-    avg = 0
+    avg = 0;
     for (int i = 0; i < num_of_threads; i++) {
         if (maxes[i] > max) {
             max = maxes[i];
