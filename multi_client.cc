@@ -110,6 +110,10 @@ void *routine(void *arg) {
                 avg = t;
             }
             if (t < min) {
+                if (min == 0) {
+                    printf("min: %d t:%d\n", min, t); 
+                    printf("getting key%s\n", temp); 
+                }
                 min = t;
             }
             if (t > max) {
@@ -119,9 +123,9 @@ void *routine(void *arg) {
         } else {
             gen_miss(temp);
             retvalue = memcached_get(memc[thread_id], temp, strlen(temp), &retlength, &flags, &rc);
-            sleep(miss_penalty); 
+            // sleep(miss_penalty); 
         }
-        usleep(inter_gap[count]);
+        // usleep(inter_gap[count]);
         count++;
         if (count >= num_test) {
           break;
@@ -130,6 +134,7 @@ void *routine(void *arg) {
     char msg[100];
     sprintf(msg, "max: %d min: %d avg: %f, count %d\n", max, min, (float)avg/count, count);
     strcpy(results[thread_id], msg);
+    printf("%d: recording result %s\n", thread_id, msg);
     maxes[thread_id] = max;
     mines[thread_id] = min;
     avges[thread_id] = avg/count;
@@ -186,21 +191,21 @@ int main(int argc, char *argv[])
     /* Update the memcached structure with the updated server list */
     fprintf(stderr, "added server: %s\n", addr);
         
-    for (int i = 0; i < num_of_threads){
+    for (int i = 0; i < num_of_threads; i++){
+        memc[i] = memcached_create(NULL);
         rc = memcached_server_push(memc[i], servers);
         if (rc == MEMCACHED_SUCCESS)
             fprintf(stderr,"Successfully added server\n");
         else
-            fprintf(stderr,"Couldn't add server: %s\n",memcached_strerror(memc, rc));
+            fprintf(stderr,"Couldn't add server: %s\n",memcached_strerror(memc[i], rc));
     }
         
     
     for (int i = 0; i < num_servers; i++) {
-        memc[i] = memcached_create(NULL);
         memcached_return_t instance_rc;
         const char *hostname= servers[i].hostname;
         in_port_t port= servers[i].port;
-        // while (libmemcached_util_ping2(hostname, port, NULL, NULL, &instance_rc) == false);
+        while (libmemcached_util_ping2(hostname, port, NULL, NULL, &instance_rc) == false);
     }
     char temp[252] = {};
     FILE *myfile = fopen("key", "a+");
@@ -271,6 +276,9 @@ int main(int argc, char *argv[])
     	printf("created thread %d total %d\n", t, num_of_threads);
     	ret = pthread_create(&threads[t], NULL, routine, (void *)t);
     }
+    for (long t = 0; t < num_of_threads; t++) {
+    	pthread_join(threads[t], NULL);
+    } 
 
     max = maxes[0];
     min = mines[0];
