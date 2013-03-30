@@ -7,7 +7,6 @@
 
 void print_all(memcached_stat_st *stat, FILE *file) {
     fprintf(file, "bytes_read: %llu\n", stat->bytes_read);
-    fprintf(stderr, "bytes_read: %llu\n", stat->bytes_read);
     fprintf(file, "bytes_written: %llu\n", stat->bytes_written);
     
     fprintf(file, "time: %llu\n", stat->time);
@@ -16,6 +15,21 @@ void print_all(memcached_stat_st *stat, FILE *file) {
 
     fprintf(file, "curr_items: %llu\n", stat->curr_items);
     fprintf(file, "total_items: %llu\n", stat->total_items);
+    fprintf(file, "rusage_user: %llu\n", stat->total_items);
+    fprintf(file, "total_items: %llu\n", stat->total_items);
+    fprintf(file, "curr_connections: %llu\n", stat->curr_connections);
+    fprintf(file, "curr_items: %llu\n", stat->curr_items);
+    fprintf(file, "rusage_system_seconds: %llu\n", stat->rusage_system_seconds);
+    fprintf(file, "rusage_system_microseconds: %llu\n", stat->rusage_system_microseconds);
+
+    fprintf(file, "rusage_user_seconds: %llu\n", stat->rusage_user_seconds);
+    fprintf(file, "rusage_user_microseconds: %llu\n", stat->rusage_user_microseconds);
+    fprintf(file, "threads: %llu\n", stat->threads);
+    fprintf(file, "total_connections: %llu\n", stat->total_connections);
+    fprintf(file, "total_items: %llu\n", stat->total_items);
+    fprintf(file, "bytes: %llu\n", stat->bytes);
+    fprintf(file, "cmd_get: %llu\n", stat->cmd_get);
+    fprintf(file, "cmd_set: %llu\n", stat->cmd_set);
 }
 
 
@@ -53,7 +67,10 @@ int main(int argc, char *argv[]) {
   struct timeval tim;
   int core = atoi(argv[2]);
   int max_ping = atoi(argv[3]);
-  char base_addr[12] = "10.0.0.%d";  
+  char base_addr[50] = "192.168.3.%d"; 
+  if (argc > 4) {
+	strcpy(base_addr, argv[4]);	
+  } 
   char addr[12];
   sprintf(addr, base_addr, core+1);
   printf("%s\n", addr);
@@ -83,7 +100,7 @@ int main(int argc, char *argv[]) {
     fflush(result_file);
     count++;
     if (count > max_ping) {
-      break;
+      // break;
     }
     sleep(interval);
     if (count % 2 == 0) {

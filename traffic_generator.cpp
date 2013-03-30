@@ -118,9 +118,12 @@ void key_init(int num) {
 
 void value_init(int num) {
     FILE *file = fopen("value", "a+");
-    for (int i = 0; i < num; i++) {
+    for (int i = 1; i < num+1; i++) {
         int temp = (int) val_pareto(gen_rand());
-        fprintf(file, "%d\n", temp % 5000);
+        if (temp > 5000) {
+            printf("%d: got %d \n", i, temp);
+        }
+        fprintf(file, "%d \n", temp);
     }
     fclose(file);
 }
@@ -129,6 +132,9 @@ void inter_init(int num) {
     FILE *file = fopen("inter", "a+");
     for (int i = 0; i < num; i++) {
         int temp = (int) inter_pareto(gen_rand());
+        if (temp > 700) {
+            printf("got %d\n", temp);
+        }
         fprintf(file, "%d\n", temp);
     }
     fclose(file);
@@ -148,13 +154,16 @@ main(int argc, char *argv[])
     if (strcmp(argv[2], (char *)"a") == 0) {
         printf("print all\n");
         key_init(size);
+        printf("key done\n");
         value_init(size);
+        printf("value done\n");
         inter_init(size);
+        printf("inter done\n");
     }
     if (strcmp(argv[2], (char *)"k") == 0) {
         key_init(size);
-        FILE *file = fopen("key", "a+");
-        /*rewind(file);
+        /* FILE *file = fopen("key", "a+");
+        rewind(file);
         //char *temp = (char *) malloc(250);
         //while (fscanf(file, "%s", temp) != EOF)
         //printf("%s\n", temp);

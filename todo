@@ -1,0 +1,39 @@
+*ping server pull everything
+
+*bins
+
+*min = 0?
+
+*don't check value
+
+heart beat thread for client
+
+auto disk images:
+    2 servers 38 clients
+
+
+try:
+    node total memory: 64
+    server: 32
+
+how many connections 
+    increase clients from 2, 4, 8, 16....
+
+write a kernel driver
+    character write and read
+
+check tickless + preemption
+no tickless + no preemption
+
+change server config
+
+
+----------------------
+12 taps
+    select to e poll <<< Peter Chen
+    main thread: creat a number of threads, one thread per tap
+    multi threaded
+
+read ip addr from file
+ping ip addr default == eth0 or passed by args
+

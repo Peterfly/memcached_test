@@ -8,10 +8,20 @@
 
 
 void gen_data(char val[], int length, int core_id) {
-    length = length % 1000;
+    // length = length % 1000;
     for (int i = 0; i < length; i++) {
         val[i] = ((i + core_id) * length) % 26 + 65;
     }
+    val[length] = '\0';
+}
+
+void gen_data_del(char val[], int length, int core_id) {
+    // length = length % 1000;
+    for (int i = 0; i < length; i++) {
+        val[i] = ((i + core_id) * length + 1) % 26 + 65;
+    }
+    val[0] = 'A';
+    val[1] = 'A';
     val[length] = '\0';
 }
 
@@ -65,11 +75,17 @@ int main(int argc, char *argv[])
     while (fscanf(file, "%d\n", &key_len) != EOF 
         && fscanf(value_file, "%d\n", &length) != EOF) {
         gen_data(value, length,core_id);
-        gen_data(temp, key_len, core_id);
+        if (count % 3 == 0) {
+            gen_data_del(temp, key_len, core_id);    
+        } else {
+            gen_data(temp, key_len, core_id);
+        }
+        
         if (rand() % 11 == 0) {
           fprintf(stderr, "key: %s\n", temp);
           fprintf(stderr, "value: %s\n", value);
         }
+        printf("Iteration %d core_id %d setting key: %s\n", count, core_id, temp);
         rc = memcached_set(memc, temp, strlen(temp), value, strlen(value), (time_t)0, (uint32_t)0);
         if (rc != MEMCACHED_SUCCESS)
             fprintf(stderr, "Couldn't store key: %s\n", memcached_strerror(memc, rc));

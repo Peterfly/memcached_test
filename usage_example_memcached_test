@@ -1,0 +1,18 @@
+[] means required; () means it will use default value if not specified. 
+
+data_init:
+	Usage: [core id] [number keys to store] (ip addr) (port)
+	Example: 0 1000 10.0.0.%d
+	Default: ip addr = 10.0.0.%d. port = 11211. Then 
+
+client program: auto_memcached:
+	Usage: [how many servers] [number keys to read] [whether it checks the returned value] (ip addr) (miss penalty) (port)
+	Example: 4 
+	
+$1: id +1
+$2: id
+$3: keys to store
+$4: ping times
+
+
+	
