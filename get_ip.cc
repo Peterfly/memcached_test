@@ -1,5 +1,7 @@
+#include <unistd.h> 
+#include <arpa/inet.h>
 #include <stdio.h>
-
+#include <stdlib.h>
 #include <string.h> /* for strncpy */
 
 #include <sys/types.h>
@@ -8,9 +10,7 @@
 #include <netinet/in.h>
 #include <net/if.h>
 
-int
-main()
-{
+int main() {
  int fd;
  struct ifreq ifr;
 

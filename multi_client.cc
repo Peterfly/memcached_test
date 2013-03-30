@@ -188,7 +188,6 @@ void *check_server(void *arg) {
 
 
 void *routine(void *arg) {
-    // int latency_record[] = {};
     memcached_return rc;  
     long thread_id = (long) arg;
     int count = 0;
@@ -201,31 +200,20 @@ void *routine(void *arg) {
     char *retvalue = NULL;
     size_t retlength;
     while (true) {
-        int rand_core = rand() % waken_counter;
-        int server_to_query = waken_servers[rand_core];
-        //printf("thread %d test: %d, total: %d\n", thread_id, count, num_test);
+        int rand_core = waken_servers[rand() % waken_counter];
 	    if (is_hit()) {
             if (count % 3 == 0) {
                 gen_key_del(temp, key_size[count], rand_core);
                 gettimeofday(&before, NULL);
-                pthread_mutex_lock(&server_mutexes[server_to_query]);
-                rc = memcached_delete(memc[server_to_query], temp, strlen(temp), expire);
-                pthread_mutex_unlock(&server_to_query[server_to_query]);
+                rc = memcached_delete(memc[thread_id], temp, strlen(temp), expire);
                 gettimeofday(&after, NULL);
             } else {
                 // printf("key size %d %d\n", key_size[count], count);
                 gen_key(temp, key_size[count], rand_core);
                 gettimeofday(&before, NULL);
                 printf("Iteration %d: getting key: %s\n", count, temp);
-                pthread_mutex_lock(&server_mutexes[server_to_query]);
-                retvalue = memcached_get(memc[server_to_query], temp, strlen(temp), &retlength, &flags, &rc);
-                pthread_mutex_unlock(&server_to_query[server_to_query]);
+                retvalue = memcached_get(memc[thread_id], temp, strlen(temp), &retlength, &flags, &rc);
                 gettimeofday(&after, NULL);
-                // printf("got key %s\n", temp);
-                // fprintf(latency, "read %d: %ld us\n", count, after - before);
-                /*if (retvalue == NULL) {
-                    printf("null return value for %s\n", temp);
-                }*/
                 if (is_check && count % 10 == 0 && retvalue != NULL) {
                     printf("checking data corruption\n");
                     check_sum(retvalue, retlength, latency, rand_core);
@@ -253,13 +241,9 @@ void *routine(void *arg) {
         } else {
             gen_miss(temp);
             if (count % 3 == 0) {
-                pthread_mutex_lock(&server_mutexes[server_to_query]);
-                rc = memcached_delete(memc[server_to_query], temp, strlen(temp), expire);
-                pthread_mutex_unlock(&server_to_query[server_to_query]);
+                rc = memcached_delete(memc[thread_id], temp, strlen(temp), expire);
             } else {
-                pthread_mutex_lock(&server_mutexes[server_to_query]);
-                retvalue = memcached_get(memc[server_to_query], temp, strlen(temp), &retlength, &flags, &rc);
-                pthread_mutex_unlock(&server_to_query[server_to_query]);
+                retvalue = memcached_get(memc[thread_id], temp, strlen(temp), &retlength, &flags, &rc);
             }
             usleep(miss_penalty * 1000); 
         }

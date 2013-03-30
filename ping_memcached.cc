@@ -1,9 +1,19 @@
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 #include <libmemcached/memcached.h>
 #include <sys/time.h>
 #include <time.h>
+
+#include <unistd.h> 
+#include <arpa/inet.h>
+#include <stdlib.h>
+#include <string.h> /* for strncpy */
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <net/if.h>
 
 void print_all(memcached_stat_st *stat, FILE *file) {
     fprintf(file, "bytes_read: %llu\n", stat->bytes_read);
@@ -59,20 +69,40 @@ void proc(FILE *result) {
   fflush(result);
 }
 
+char *get_ip(char device_name[]) {
+    int fd;
+    struct ifreq ifr;
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    /* I want to get an IPv4 IP address */
+    ifr.ifr_addr.sa_family = AF_INET;
+
+    /* I want IP address attached to "eth0" */
+    strncpy(ifr.ifr_name, device_name, IFNAMSIZ-1);
+
+    ioctl(fd, SIOCGIFADDR, &ifr);
+    close(fd);
+    return inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
+}
+
 int main(int argc, char *argv[]) {
   memcached_server_st *server = NULL;
   memcached_st *memc;
   memcached_return rc;
+  char device_name[8];
   memc = memcached_create(NULL);
   struct timeval tim;
-  int core = atoi(argv[2]);
+  // int core = atoi(argv[2]);
+  strcpy(device_name, argv[2]);
   int max_ping = atoi(argv[3]);
   char base_addr[50] = "192.168.3.%d"; 
   if (argc > 4) {
 	strcpy(base_addr, argv[4]);	
   } 
   char addr[12];
-  sprintf(addr, base_addr, core+1);
+  // sprintf(addr, base_addr, core+1);
+  strcpy(addr, get_ip(device_name));
   printf("%s\n", addr);
   server = memcached_server_list_append(server, addr, 11211, &rc);
   rc = memcached_server_push(memc, server);
