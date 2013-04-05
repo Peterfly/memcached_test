@@ -1,3 +1,19 @@
+#include <unistd.h>
+#include <libmemcached/memcached.h>
+#include <sys/time.h>
+#include <time.h>
+
+#include <unistd.h> 
+#include <arpa/inet.h>
+#include <stdlib.h>
+#include <string.h> /* for strncpy */
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <net/if.h>
+
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -5,6 +21,23 @@
 
 #include <math.h>
 #include <iostream>
+
+char *get_ip(char device_name[]) {
+    int fd;
+    struct ifreq ifr;
+
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+
+    /* I want to get an IPv4 IP address */
+    ifr.ifr_addr.sa_family = AF_INET;
+
+    /* I want IP address attached to "eth0" */
+    strncpy(ifr.ifr_name, device_name, IFNAMSIZ-1);
+
+    ioctl(fd, SIOCGIFADDR, &ifr);
+    close(fd);
+    return inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
+}
 
 
 void gen_data(char val[], int length, int core_id) {
@@ -47,16 +80,19 @@ int main(int argc, char *argv[])
     }
     int core_id = atoi(argv[1]);
     int num_test = atoi(argv[2]);
+    char device_name[8];
     if (argc > 3) {
-        strcpy(ip_addr, argv[3]);
+        strcpy(device_name, argv[3]);
     }
     if (argc > 4) {
         port = atoi(argv[4]);
     }
 
     char addr[12];
-    sprintf(addr, ip_addr, core_id + 1);
-    fprintf(stderr, "added server: %s\n", addr);
+    // sprintf(addr, ip_addr, core_id + 1);
+    // fprintf(stderr, "added server: %s\n", addr);
+    printf("ip addr %s\n", get_ip(device_name));
+    strcpy(addr, get_ip(device_name));
     servers = memcached_server_list_append(servers, addr, port, &rc);
     /* Update the memcached structure with the updated server list. */
     rc = memcached_server_push(memc, servers);

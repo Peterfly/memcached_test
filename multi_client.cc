@@ -40,6 +40,8 @@ int waken_counter = 0;
 int waken_servers[MAXTHREADS] = {-1};
 pthread_mutex_t server_mutexes[MAXTHREADS];
 
+char *server_addr[MAXTHREADS] = {NULL};
+
 long difftime(timeval before, timeval after) {
     long diff = (after.tv_usec - before.tv_usec) + (after.tv_sec - before.tv_sec) * 1000000;
     return diff;
@@ -320,11 +322,30 @@ int main(int argc, char *argv[])
     }
     
     char addr[12];
-    for (int i = 0; i < num_servers; i++) {
+    FILE *configuration = fopen("configuration", "a+");
+    int total_addr = 0;
+    while (fscanf(configuration, "%s\n", server_addr[total_addr]) != EOF) {
+        total_addr++;
+    }
+    if (total_addr != num_servers) {
+        fprintf(stderr, "Might be a bug in configuration. \n");
+    }
+    for (int i = 0; i < total_addr; i++) {
+        servers = memcached_server_list_append(servers, server_addr[i], port, &rc);
+    }
+    for (int i = 0; i < num_of_threads; i++){
+        memc[i] = memcached_create(NULL);
+        rc = memcached_server_push(memc[i], servers);
+        if (rc == MEMCACHED_SUCCESS)
+            fprintf(stderr,"Successfully added server\n");
+        else
+            fprintf(stderr,"Couldn't add server: %s\n",memcached_strerror(memc[i], rc));
+    }
+    
+    /*for (int i = 0; i < num_servers; i++) {
         sprintf(addr, ip_addr, i+1);
         servers = memcached_server_list_append(servers, addr, port, &rc);
     }
-    /* Update the memcached structure with the updated server list */
     fprintf(stderr, "added server: %s\n", addr);
         
     for (int i = 0; i < num_of_threads; i++){
@@ -334,7 +355,10 @@ int main(int argc, char *argv[])
             fprintf(stderr,"Successfully added server\n");
         else
             fprintf(stderr,"Couldn't add server: %s\n",memcached_strerror(memc[i], rc));
-    }
+    }*/
+
+
+
 
     /* Start querying servers and recording results. */
     int ping_times;
@@ -369,6 +393,8 @@ int main(int argc, char *argv[])
 
     pthread_t hb;
     int hh = pthread_create(&hb, NULL, heart_beat, (void *)latency);
+    pthread_t checking;
+    int cc = pthread_create(&checking, NULL, check_server, (void *)0);
 
     rewind(latency);
     rewind(myfile);
@@ -464,5 +490,9 @@ int main(int argc, char *argv[])
     fclose(myfile);
     fclose(latency);
     pthread_cancel(hb);
+    pthread_cancel(checking);
     pthread_exit(NULL);
+    for (int i = 0; i < num_of_threads; i++) {
+        memcached_free(memc[i]);
+    }
 }
