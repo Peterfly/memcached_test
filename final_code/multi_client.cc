@@ -10,10 +10,10 @@
 #include <ctype.h>
 #define HIT_RATE 81
 #define MISS_PENALTY 2
-#define MAXTHREADS 100
+#define MAXTHREADS 100 
 #define NUM_STARS 10
 #define MAX_PING 5000
-#define MAX_SERVERS 2000
+#define MAX_SERVERS 100
 
 int miss_penalty = 2;
 int *key_size;
@@ -32,7 +32,7 @@ bool is_check;
 bool is_infi;
 FILE *latency;
 uint32_t flags;                     
-int beat_interval;
+int beat_interval = 2;
 memcached_server_st *servers[MAX_SERVERS];
 char ip_addr[12] = "10.0.0.%d";
 
@@ -144,15 +144,17 @@ void plot(int arr[]) {
 void *heart_beat(void *arg) {
     long times = 0;
     FILE *output = (FILE *) arg;
+    fprintf(output, "b\n");
     while (true) {
         for (int i = 0; i < num_of_threads; i++) {
-          fprintf(output, "thread %d: max %d min %d\n", i, maxes[i], mines[i]); 
-          fprintf(stderr, "thread %d: max %d min %d\n", i, maxes[i], mines[i]); 
+          // fprintf(output, "thread %d: max %d min %d\n", i, maxes[i], mines[i]); 
+          // fprintf(stderr, "thread %d: max %d min %d\n", i, maxes[i], mines[i]); 
         }
-        fprintf(output, "beat %d times\n", times);
+        // fprintf(output, "beat %d times\n", times);
         times ++;
-        fprintf(output, "********\n");
-        usleep(beat_interval*10000000);
+        // fprintf(output, "********\n");
+        // usleep(beat_interval*100000);
+        usleep(10000);
     }
 }
 
@@ -188,10 +190,11 @@ void *check_server(void *arg) {
                             } else {
                                 // printf("Waiting for initializer to complete.\n");
                                 count++;
-                        if (count < 1000) {
-                        sleep(2);
-                    } else { sleep(10); }
-                    break;
+                            }
+                    if (count < 1000) {
+                        // sleep(2);
+                    } else { 
+                        // sleep(4); 
                     }
                 }
             }
@@ -231,11 +234,14 @@ void *routine(void *arg) {
     size_t retlength;
     int miss_count = 0;
     while (true) {
+        if (count % 500 == 0) {
+          printf("thread %d pings %d times\n", thread_id, count);
+        }
         int index = rand() % waken_counter;
-        printf("index is %d, %d\n", index, waken_servers[index]);
+        // printf("index is %d, %d\n", index, waken_servers[index]);
         int rand_core = waken_servers[index];
         int core_key = id_map[rand_core];
-        printf("query from %d, waken: %d\n", rand_core, waken_counter);
+        // printf("query from %d, waken: %d\n", rand_core, waken_counter);
         if (rand_core < 0) {
             printf("something weird happends!\n");
             continue;
@@ -254,7 +260,7 @@ void *routine(void *arg) {
                 retvalue = memcached_get(memc[thread_id][rand_core], temp, strlen(temp), &retlength, &flags, &rc);
                 if (retvalue == NULL) {
             miss_count++;
-            printf("miss counting %d", miss_count);
+            // printf("miss counting %d", miss_count);
         }
         gettimeofday(&after, NULL);
                 if (is_check && count % 10 == 0 && retvalue != NULL) {
@@ -289,9 +295,9 @@ void *routine(void *arg) {
             } else {
                retvalue = memcached_get(memc[thread_id][rand_core], temp, strlen(temp), &retlength, &flags, &rc);
             }
-            usleep(miss_penalty * 1000); 
+            // usleep(miss_penalty * 1000); 
         }
-        usleep(inter_gap[count]);
+        // usleep(inter_gap[count]);
         count++;
         maxes[thread_id] = max;
         mines[thread_id] = min;
@@ -300,11 +306,12 @@ void *routine(void *arg) {
             break;
         }
     }
+    printf("thread %d is done", thread_id);
     char msg[100];
     sprintf(msg, "max: %d min: %d avg: %f, count %d\n", max, min, (float)avg/count, count);
     strcpy(results[thread_id], msg);
-    printf("%d: recording result %s\n", thread_id, msg);
-    printf("setting t to 0, min %d, max %d, avg: %d", min, max, avg);
+    // printf("%d: recording result %s\n", thread_id, msg);
+    // printf("setting t to 0, min %d, max %d, avg: %d", min, max, avg);
         if (count == 0) {
       printf("count is zero");
     }
@@ -365,7 +372,7 @@ int main(int argc, char *argv[])
     }
     
     char addr[12];
-    FILE *configuration = fopen("configuration", "a+");
+    FILE *configuration = fopen("./configuration", "r");
     int total_addr = 0;
     while (fscanf(configuration, "%s\n", server_addr[total_addr]) != EOF) {
         printf("%d: got ip addr %s\n", total_addr, server_addr[total_addr]);
@@ -418,8 +425,10 @@ int main(int argc, char *argv[])
             ping_times = 0;
             while (libmemcached_util_ping2(hostname, port, NULL, NULL, &instance_rc) == false) {
                 if (ping_times > MAX_PING) {
+                    printf("server %d larger than max ping", i);
                     break;
                 }
+                // usleep(200000);
                 ping_times++;
             }
             if (libmemcached_util_ping2(hostname, port, NULL, NULL, &instance_rc) == true) {
@@ -435,9 +444,9 @@ int main(int argc, char *argv[])
     }
         
     char temp[252] = {};
-    FILE *myfile = fopen("key", "a+");
-    FILE *timeinter = fopen("inter", "a+");
-    latency = fopen("latency", "a+");
+    FILE *myfile = fopen("./key", "r");
+    FILE *timeinter = fopen("./inter", "r");
+    latency = fopen("/dev/ramptalk", "w");
 
     pthread_t hb;
     int hh = pthread_create(&hb, NULL, heart_beat, (void *)latency);
@@ -471,7 +480,7 @@ int main(int argc, char *argv[])
         while (true) {
             strcpy(temp, "done");
             char *value = (char *) malloc(5001);
-            printf("get done from %d\n", i);
+            printf("waiting for server %d\n", i);
             retvalue = memcached_get(memc[0][i], temp, strlen(temp), &retlength, &flags, &rc);
             // printf("getting value\n");
             if (retvalue && (strcmp(temp, retvalue) == 0)) {
@@ -533,15 +542,16 @@ int main(int argc, char *argv[])
         avg += avges[i];
         fprintf(latency, "%d: %s\n", i, results[i]);
     }
-    fprintf(latency, "TOTAL: max: %d min: %d avg: %f, count %d\n", max, min, (float)avg/count, count);
+    // fprintf(latency, "T: max: %d min: %d avg: %f, count %d\n", max, min, (float)avg/count, count);
     fclose(timeinter);
     fclose(myfile);
     fclose(latency);
     pthread_cancel(hb);
     pthread_cancel(checking);
-    pthread_exit(NULL);
+    
     for (int i = 0; i < num_of_threads; i++) {
         for (int j = 0; j < num_servers; j++)
         memcached_free(memc[i][j]);
     }
+    pthread_exit(NULL);
 }

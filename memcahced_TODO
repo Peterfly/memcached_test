@@ -8,7 +8,14 @@ host mem size
 
 =======
 
+change core id and hooked up with ctrl c
+
 threads: 1-2-4
 500 ms, 
-memory size: 
+memory size: according to 
+
+
+0-31, 0-31, 1-32
+
+1-2-4-8
 

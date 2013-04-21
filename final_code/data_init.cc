@@ -3,6 +3,9 @@
 #include <sys/time.h>
 #include <time.h>
 
+#include <libmemcachedutil-1.0/ping.h>
+#include <libmemcachedutil-1.0/util.h>
+
 #include <unistd.h> 
 #include <arpa/inet.h>
 #include <stdlib.h>
@@ -113,6 +116,11 @@ int main(int argc, char *argv[])
     // fprintf(stderr, "added server: %s\n", addr);
     // printf("ip addr %s\n", get_ip(device_name));
     strcpy(addr, get_ip(device_name));
+    memcached_return_t instance_rc;
+    while (libmemcached_util_ping2(addr, port, NULL, NULL, &instance_rc) == false) {
+        usleep(200000);
+        printf("waiting for server to wake up\n");
+    }
     core_id = get_id(addr);
     servers = memcached_server_list_append(servers, addr, port, &rc);
     /* Update the memcached structure with the updated server list. */
@@ -121,9 +129,18 @@ int main(int argc, char *argv[])
         fprintf(stderr,"Successfully added server\n");
     else
         fprintf(stderr,"Couldn't add server: %s\n",memcached_strerror(memc, rc));
-    FILE *file = fopen("key", "a+");
-    rewind(file);
-    FILE *value_file = fopen("value", "a+");
+    FILE *file = fopen("./key", "r");
+    if (file == NULL) {
+        perror("fopen(key): ");
+        exit(1);
+    }
+    // rewind(file);
+    FILE *value_file = fopen("./value", "r");
+    if (value_file == NULL) {
+        perror("fopen(value): ");
+        exit(1);
+    }
+
     char *temp = (char *) malloc(250);
     int key_len;
     char *value = (char *) malloc(5001);
@@ -132,37 +149,41 @@ int main(int argc, char *argv[])
     while (fscanf(file, "%d\n", &key_len) != EOF 
         && fscanf(value_file, "%d\n", &length) != EOF) {
         gen_data(value, length,core_id);
-        printf("count: %d, len %d id %d", count, key_len, core_id);
-	    
+        // printf("count: %d, len %d id %d", count, key_len, core_id);
+	    /*if (count % 5000 == 0) {
+        
+            printf("count: %d, len %d id %d", count, key_len, core_id);
+          } */
 
-	if (count % 3 == 0) {
+    	if (count % 3 == 0) {
             gen_data_del(temp, key_len, core_id);    
         } else {
             gen_data(temp, key_len, core_id);
         }
-        
-        if (rand() % 11 == 0) {
-          fprintf(stderr, "key: %s\n", temp);
-          fprintf(stderr, "value: %s\n", value);
+            
+        if (count % 500 == 0) {
+          printf("iteration %d\n", count);
+          //fprintf(stderr, "key: %s\n", temp);
+          //fprintf(stderr, "value: %s\n", value);
         }
-        printf("Iteration %d core_id %d setting key: %s\n", count, core_id, temp);
+        // printf("Iteration %d core_id %d setting key: %s\n", count, core_id, temp);
         rc = memcached_set(memc, temp, strlen(temp), value, strlen(value), (time_t) 0, (uint32_t) 0);
-	usleep(200);
+    	usleep(200);
         if (rc != MEMCACHED_SUCCESS)
             fprintf(stderr, "Couldn't store key: %s\n", memcached_strerror(memc, rc));
-	count++;
+    	count++;
         if (count > num_test) {
             break;
         }
     }
 	strcpy(temp, "done");
-	    strcpy(value, "done");
-	    rc = memcached_set(memc, temp, strlen(temp), value, strlen(value), (time_t)0, (uint32_t)0);
-	    if (rc == MEMCACHED_SUCCESS) {
-		fprintf(stderr, "Successfully initialized servers.\n");
-	    } else {
-		fprintf(stderr, "Failed to set the final key.\n");
-	    }
+    strcpy(value, "done");
+    rc = memcached_set(memc, temp, strlen(temp), value, strlen(value), (time_t)0, (uint32_t)0);
+    if (rc == MEMCACHED_SUCCESS) {
+	fprintf(stderr, "Successfully initialized servers.\n");
+    } else {
+	fprintf(stderr, "Failed to set the final key.\n");
+    }
     fclose(file);
     fclose(value_file);
     // free(temp);

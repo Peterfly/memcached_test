@@ -24,7 +24,7 @@ static FILE *result_file;
 static void sigint_handler(int sig)
 {
     printf("called hanlder!!\n");
-    result_file = fopen("result", "a+");
+    result_file = fopen("/dev/ramptalk", "w");
     char *temp = (char *) malloc(60);
     while (!myqueue.empty())
     {
@@ -42,30 +42,34 @@ static void sigint_handler(int sig)
 
 
 void print_all(memcached_stat_st *stat, FILE *file) {
-    char *temp = (char *) malloc(60);
-    sprintf(temp, "bytes_read: %llu\n", stat->bytes_read);
-    myqueue.push(temp);
-    temp = (char *) malloc(40);
+    // char *temp = (char *) malloc(60);
+    // sprintf(temp, "bytes_read: %llu\n", stat->bytes_read);
+    // Bytes_read
+    fprintf(file, "r:%llu\n", stat->bytes_read);
+    // myqueue.push(temp);
+    // temp = (char *) malloc(40);
     // temp = 
-    // fprintf(file, "bytes_written: %llu\n", stat->bytes_written);
-    sprintf(temp, "bytes_written: %llu\n", stat->bytes_written);
-    myqueue.push(temp);
-    temp = (char *) malloc(40);
+    // Bytes_written
+    fprintf(file, "w:%llu\n", stat->bytes_written);
+    // sprintf(temp, "bytes_written: %llu\n", stat->bytes_written);
+    // myqueue.push(temp);
+    // temp = (char *) malloc(40);
     
-    // fprintf(file, "time: %llu\n", stat->time);
-    sprintf(temp, "time: %llu\n", stat->time);
-    myqueue.push(temp);
-    temp = (char *) malloc(40);
-
-    sprintf(temp, "get_hits: %llu\n", stat->get_hits);
+    fprintf(file, "t:%llu\n", stat->time);
     // sprintf(temp, "time: %llu\n", stat->time);
-    myqueue.push(temp);
-    temp = (char *) malloc(40);
+    // myqueue.push(temp);
+    // temp = (char *) malloc(40);
 
-    // fprintf(file, "get_misses: %llu\n", stat->get_misses);
-    sprintf(temp, "get_misses: %llu\n", stat->get_misses);
-    myqueue.push(temp);
-    temp = (char *) malloc(40);
+    // sprintf(temp, "get_hits: %llu\n", stat->get_hits);
+    fprintf(file, "h:%llu\n", stat->get_hits);
+    // sprintf(temp, "time: %llu\n", stat->time);
+    // myqueue.push(temp);
+    // temp = (char *) malloc(40);
+
+    fprintf(file, "m:%llu\n", stat->get_misses);
+    // sprintf(temp, "get_misses: %llu\n", stat->get_misses);
+    // myqueue.push(temp);
+    // temp = (char *) malloc(40);
 
     // fprintf(file, "curr_items: %llu\n", stat->curr_items);
     // fprintf(file, "total_items: %llu\n", stat->total_items);
@@ -169,13 +173,14 @@ int main(int argc, char *argv[]) {
   memcached_return_t err;
  
   int count = 0;
-  result_file = fopen("result", "a+");
+  result_file = fopen("/dev/ramptalk", "w");
   if (result_file == 0) {
     fprintf(stderr, "failed\n");
   }
   time_t stamp;
   signal(SIGINT, sigint_handler);
   signal(SIGKILL,sigint_handler);
+  signal(SIGTERM,sigint_handler);
   while (true) {
     stat = memcached_stat(memc, NULL, &err);
     stamp = time(NULL);
