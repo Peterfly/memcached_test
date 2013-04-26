@@ -15,6 +15,11 @@
 #define MAX_PING 5000
 #define MAX_SERVERS 100
 
+struct info{
+  long total;
+  int count;
+};
+
 int miss_penalty = 2;
 int *key_size;
 int *inter_gap;
@@ -26,6 +31,7 @@ int num_servers;
 char results[MAXTHREADS][100];
 long maxes[MAXTHREADS] = {0};
 long mines[MAXTHREADS] = {0};
+info* sum = new info[MAXTHREADS];
 int id_map[MAX_SERVERS] = {-1};
 float avges[MAXTHREADS];
 bool is_check;
@@ -148,14 +154,21 @@ void *heart_beat(void *arg) {
     while (true) {
         for (int i = 0; i < num_of_threads; i++) {
           // fprintf(output, "thread %d: max %d min %d\n", i, maxes[i], mines[i]); 
+          pthread_mutex_lock(&server_mutexes[i]);
+          fprintf(output, "%d, %d, %d\n", i, sum[i].total, sum[i].count);
+          pthread_mutex_unlock(&server_mutexes[i]);
+          // fprintf(output, "%d:%d,%d", i, maxes[i], mines[i]); 
           // fprintf(stderr, "thread %d: max %d min %d\n", i, maxes[i], mines[i]); 
         }
         // fprintf(output, "beat %d times\n", times);
         times ++;
         // fprintf(output, "********\n");
+        // fprintf(output, "%s\n", );
         // usleep(beat_interval*100000);
-        usleep(10000);
+        fflush(output);
+        usleep(500000);
     }
+    pthread_exit(NULL);
 }
 
 void *check_server(void *arg) {
@@ -181,25 +194,29 @@ void *check_server(void *arg) {
                     if (rc != MEMCACHED_SUCCESS)
                         fprintf(stderr, "Couldn't store key: %s\n", memcached_strerror(memc[0][i], rc));
          
-                            if (retvalue && (strcmp(temp, retvalue) == 0)) {
-                                // printf("Start sampling.\n");
-                                sleeping_servers[i] = false;
-                                waken_servers[waken_counter] = i;
-                                waken_counter++;
-                                break;
-                            } else {
-                                // printf("Waiting for initializer to complete.\n");
-                                count++;
-                            }
+                    if (retvalue && (strcmp(temp, retvalue) == 0)) {
+                        // printf("Start sampling.\n");
+                        sleeping_servers[i] = false;
+                        waken_servers[waken_counter] = i;
+                        waken_counter++;
+                        break;
+                    } else {
+                        // printf("Waiting for initializer to complete.\n");
+                        count++;
+
+                    }
                     if (count < 1000) {
                         // sleep(2);
+                        usleep(200000);
                     } else { 
                         // sleep(4); 
+                        usleep(400000);
                     }
                 }
             }
         }
     }
+    pthread_exit(NULL);
 }
 
 int get_id(char *str) {
@@ -259,16 +276,26 @@ void *routine(void *arg) {
             // printf("Iteration %d, len %d id %d, getting key %s\n", count, key_size[count], rand_core, temp);
                 retvalue = memcached_get(memc[thread_id][rand_core], temp, strlen(temp), &retlength, &flags, &rc);
                 if (retvalue == NULL) {
-            miss_count++;
+                    miss_count++;
             // printf("miss counting %d", miss_count);
-        }
-        gettimeofday(&after, NULL);
+                }
+                gettimeofday(&after, NULL);
                 if (is_check && count % 10 == 0 && retvalue != NULL) {
                     printf("checking data corruption\n");
                     check_sum(retvalue, retlength, latency, rand_core);
                 }
+                if (rc != MEMCACHED_SUCCESS) {
+                    // printf("thread %d, unsuccessful key get %s\n", thread_id, temp);
+                    fprintf(stderr,"Couldn't get key: %s\n",memcached_strerror(memc[thread_id][rand_core], rc));
+                    int retry = 0;
+                    while (retry < MAX_RETRY && (rc == MEMCACHED_TIMEOUT || rc == MEMCACHED_SERVER_TEMPORARILY_DISABLED)) {
+                        retry++;
+                            
+                    }
+                }
                 fflush(latency);
             }
+
             long t = difftime(before, after);
             // long t = 0;
             if (count == 0) {
@@ -295,26 +322,36 @@ void *routine(void *arg) {
             } else {
                retvalue = memcached_get(memc[thread_id][rand_core], temp, strlen(temp), &retlength, &flags, &rc);
             }
-            // usleep(miss_penalty * 1000); 
+            usleep(miss_penalty * 1000); 
         }
-        // usleep(inter_gap[count]);
+
+        // fprintf(stderr,"return-msg: %s\n",memcached_strerror(memc[thread_id][rand_core], rc));
+
+        if (inter_gap[count] > 0)
+            usleep(inter_gap[count]);
         count++;
         maxes[thread_id] = max;
         mines[thread_id] = min;
-
+        pthread_mutex_lock (&server_mutexes[thread_id]);
+        sum[thread_id].total = avg;
+        sum[thread_id].count = count;
+        pthread_mutex_unlock (&server_mutexes[thread_id]);
+        // fprintf(latency, "%d: %d %d\n", thread_id, avg, count);
         if (count >= num_test && !is_infi) {
             break;
         }
     }
     printf("thread %d is done", thread_id);
     char msg[100];
-    sprintf(msg, "max: %d min: %d avg: %f, count %d\n", max, min, (float)avg/count, count);
+    // sprintf(msg, "max: %d min: %d avg: %f, count %d\n", max, min, (float)avg/count, count);
+    sprintf(msg, "%d,%d,%f,%d\n", max, min, (float)avg/count, count);
     strcpy(results[thread_id], msg);
     // printf("%d: recording result %s\n", thread_id, msg);
     // printf("setting t to 0, min %d, max %d, avg: %d", min, max, avg);
         if (count == 0) {
       printf("count is zero");
     }
+    // fprintf(latency, "%d,%d,%d\n", thread_id, avg, count);
     avges[thread_id] = avg/count;
     // quicksort(latency_record, 0, num_test);
     // plot(latency_record);    
@@ -428,6 +465,7 @@ int main(int argc, char *argv[])
                     printf("server %d larger than max ping", i);
                     break;
                 }
+                usleep(2000);
                 // usleep(200000);
                 ping_times++;
             }
@@ -492,6 +530,7 @@ int main(int argc, char *argv[])
             } else {
                 printf("Waiting for initializer to complete.\n");
                 // sleep(1);
+                usleep(200000);
             }
         }
     }
@@ -532,6 +571,7 @@ int main(int argc, char *argv[])
     max = maxes[0];
     min = mines[0];
     avg = 0;
+    fprintf(latency, "thread: max, min, avg, count\n");
     for (int i = 0; i < num_of_threads; i++) {
         if (maxes[i] > max) {
             max = maxes[i];
@@ -552,6 +592,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < num_of_threads; i++) {
         for (int j = 0; j < num_servers; j++)
         memcached_free(memc[i][j]);
+        pthread_cancel(threads[i]);
     }
     pthread_exit(NULL);
 }

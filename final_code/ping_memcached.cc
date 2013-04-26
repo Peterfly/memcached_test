@@ -29,6 +29,7 @@ static void sigint_handler(int sig)
     while (!myqueue.empty())
     {
         temp = myqueue.front();
+        // printf("writing\n");
         fprintf(result_file, temp);
         myqueue.pop();
         fflush(result_file);
@@ -38,14 +39,85 @@ static void sigint_handler(int sig)
     return;
 }//sigint_handler
 
-
-
+void inline reverse(char *ptr, int size) {
+  for (int i = 0; i < (size >> 1); i++) {
+    char temp = ptr[i];
+    ptr[i] = ptr[size - i - 1];
+    ptr[size - i] = temp;
+  }
+}
 
 void print_all(memcached_stat_st *stat, FILE *file) {
     // char *temp = (char *) malloc(60);
     // sprintf(temp, "bytes_read: %llu\n", stat->bytes_read);
     // Bytes_read
-    fprintf(file, "r:%llu\n", stat->bytes_read);
+    // printf("NOTE:writing stats\n");
+    
+    fprintf(stderr, "%llu,%llu,%llu,%llu,%llu\n", stat->bytes_read,
+        stat->bytes_written, stat->time, stat->get_hits, stat->get_misses);
+
+    fprintf(stderr, "this is lu! %lu,%lu,%lu,%lu,%lu\n", stat->bytes_read,
+        stat->bytes_written, stat->time, stat->get_hits, stat->get_misses);
+
+/*
+    // bytes read
+    char *ptr;
+    ptr = (char *) &stat->bytes_read;
+    int s = sizeof(stat->bytes_read);
+    printf("bytes_read size: %d\n", s);
+    for (int i = 0; i < s; i++) {
+      printf("%02x ", ptr[i]);
+    }
+    printf("\n");
+    reverse(ptr, s);
+
+    // bytes written
+    ptr = (char *) &stat->bytes_written;
+    s = sizeof(stat->bytes_written);
+    printf("bytes_read size: %d\n", s);
+    for (int i = 0; i < s; i++) {
+      printf("%02x ", ptr[i]);
+    }
+    printf("\n");
+    reverse(ptr, s);
+
+    // time
+    ptr = (char *) &stat->time;
+    s = sizeof(stat->time);
+    printf("bytes_read size: %d\n", s);
+    for (int i = 0; i < s; i++) {
+      printf("%02x ", ptr[i]);
+    }
+    printf("\n");
+    reverse(ptr, s);
+
+    // get hits
+    ptr = (char *) &stat->get_hits;
+    s = sizeof(stat->get_hits);
+    printf("bytes_read size: %d\n", s);
+    for (int i = 0; i < s; i++) {
+      printf("%02x ", ptr[i]);
+    }
+    printf("\n");
+    reverse(ptr, s);
+
+
+    // get misses
+    *ptr;
+    ptr = (char *) &stat->get_misses;
+    s = sizeof(stat->get_misses);
+    printf("bytes_read size: %d\n", s);
+    for (int i = 0; i < s; i++) {
+      printf("%02x ", ptr[i]);
+    }
+    printf("\n");
+    reverse(ptr, s);*/
+
+
+    fprintf(file, "%llu,%llu,%lu,%llu,%llu\n", stat->bytes_read,
+        stat->bytes_written, stat->time, stat->get_hits, stat->get_misses);
+    fflush(file);
+    /*fprintf(file, "r:%llu\n", stat->bytes_read);
     // myqueue.push(temp);
     // temp = (char *) malloc(40);
     // temp = 
@@ -86,7 +158,7 @@ void print_all(memcached_stat_st *stat, FILE *file) {
     // fprintf(file, "total_items: %llu\n", stat->total_items);
     // fprintf(file, "bytes: %llu\n", stat->bytes);
     // fprintf(file, "cmd_get: %llu\n", stat->cmd_get);
-    // fprintf(file, "cmd_set: %llu\n", stat->cmd_set);
+    // fprintf(file, "cmd_set: %llu\n", stat->cmd_set);*/
 }
 
 
@@ -98,17 +170,20 @@ void proc(FILE *result) {
     char x[100] = {};
     fscanf(fs, "%s%s\n", temp, x);
     sprintf(copier, "%s%s\n", temp, x);
-    myqueue.push(copier);
+    // myqueue.push(copier);
+    fprintf(result, "%s", copier);
     copier = (char *) malloc(60 * sizeof(char));
+    
 
     // fprintf(result, "%s%s\n", temp, x);
     fscanf(fs, "%s\n", temp);
     fscanf(fs, "%s%s\n", temp, x);
     sprintf(copier, "%s%s\n", temp, x);
-    myqueue.push(copier);
+    fprintf(result, "%s", copier);
+    // myqueue.push(copier);
     copier = (char *) malloc(60 * sizeof(char));
     sprintf(copier, "");
-    // fprintf(result, "%s%s\n", temp, x);
+    // (result, "%s%s\n", temp, x);
     // fclose(fs);
 
     fs = fopen("/proc/stat", "r");
@@ -121,7 +196,8 @@ void proc(FILE *result) {
     }
     sprintf(copier, "%s\n", copier);
     // printf("copier is %s\n", copier);
-    myqueue.push(copier);
+    // myqueue.push(copier);
+    fprintf(result, "%s", copier);
     copier = (char *) malloc(60 * sizeof(char));
     fclose(fs);
     // fflush(result);
@@ -145,6 +221,7 @@ char *get_ip(char device_name[]) {
 }
 
 int main(int argc, char *argv[]) {
+  printf("ping program starts!\n");
   memcached_server_st *server = NULL;
   memcached_st *memc;
   memcached_return rc;
@@ -174,6 +251,9 @@ int main(int argc, char *argv[]) {
  
   int count = 0;
   result_file = fopen("/dev/ramptalk", "w");
+  printf("NOTE: writing to ramptalk\n");
+  fprintf(result_file, "read written time hits misses\n");
+  fflush(result_file);
   if (result_file == 0) {
     fprintf(stderr, "failed\n");
   }
@@ -194,10 +274,11 @@ int main(int argc, char *argv[]) {
       // break;
     }
     // sleep(interval);
+    
+    // if (count % 2 == 0) {
+    proc(result_file);
+    // }
     usleep(500000);
-    if (count % 2 == 0) {
-      proc(result_file);
-    }
   }
   fclose(result_file);
   free(stat);

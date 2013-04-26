@@ -130,7 +130,8 @@ void *initialize(void *arg) {
         start++;
     }
 
-		printf("thread %d finished\n", thread_id);
+	printf("thread %d finished\n", thread_id);
+    pthread_exit(NULL);
 }
 
 int main(int argc, char *argv[])                                                                                                        
@@ -177,7 +178,7 @@ int main(int argc, char *argv[])
     strcpy(addr, get_ip(device_name));
     memcached_return_t instance_rc;
     while (libmemcached_util_ping2(addr, port, NULL, NULL, &instance_rc) == false) {
-        usleep(200000);
+        usleep(2000);
         printf("waiting for server to wake up\n");
     }
     core_id = get_id(addr);
