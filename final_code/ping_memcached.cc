@@ -52,66 +52,16 @@ void print_all(memcached_stat_st *stat, FILE *file) {
     // sprintf(temp, "bytes_read: %llu\n", stat->bytes_read);
     // Bytes_read
     // printf("NOTE:writing stats\n");
-    
+   /* 
     fprintf(stderr, "%llu,%llu,%llu,%llu,%llu\n", stat->bytes_read,
         stat->bytes_written, stat->time, stat->get_hits, stat->get_misses);
 
     fprintf(stderr, "this is lu! %lu,%lu,%lu,%lu,%lu\n", stat->bytes_read,
         stat->bytes_written, stat->time, stat->get_hits, stat->get_misses);
+  */
 
-/*
     // bytes read
-    char *ptr;
-    ptr = (char *) &stat->bytes_read;
-    int s = sizeof(stat->bytes_read);
-    printf("bytes_read size: %d\n", s);
-    for (int i = 0; i < s; i++) {
-      printf("%02x ", ptr[i]);
-    }
-    printf("\n");
-    reverse(ptr, s);
-
-    // bytes written
-    ptr = (char *) &stat->bytes_written;
-    s = sizeof(stat->bytes_written);
-    printf("bytes_read size: %d\n", s);
-    for (int i = 0; i < s; i++) {
-      printf("%02x ", ptr[i]);
-    }
-    printf("\n");
-    reverse(ptr, s);
-
-    // time
-    ptr = (char *) &stat->time;
-    s = sizeof(stat->time);
-    printf("bytes_read size: %d\n", s);
-    for (int i = 0; i < s; i++) {
-      printf("%02x ", ptr[i]);
-    }
-    printf("\n");
-    reverse(ptr, s);
-
-    // get hits
-    ptr = (char *) &stat->get_hits;
-    s = sizeof(stat->get_hits);
-    printf("bytes_read size: %d\n", s);
-    for (int i = 0; i < s; i++) {
-      printf("%02x ", ptr[i]);
-    }
-    printf("\n");
-    reverse(ptr, s);
-
-
-    // get misses
-    *ptr;
-    ptr = (char *) &stat->get_misses;
-    s = sizeof(stat->get_misses);
-    printf("bytes_read size: %d\n", s);
-    for (int i = 0; i < s; i++) {
-      printf("%02x ", ptr[i]);
-    }
-    printf("\n");
-    reverse(ptr, s);*/
+    
 
 
     fprintf(file, "%llu,%llu,%lu,%llu,%llu\n", stat->bytes_read,
@@ -171,7 +121,7 @@ void proc(FILE *result) {
     fscanf(fs, "%s%s\n", temp, x);
     sprintf(copier, "%s%s\n", temp, x);
     // myqueue.push(copier);
-    fprintf(result, "%s", copier);
+    // fprintf(result, "%s", copier);
     copier = (char *) malloc(60 * sizeof(char));
     
 
@@ -238,13 +188,11 @@ int main(int argc, char *argv[]) {
   char addr[12];
   // sprintf(addr, base_addr, core+1);
   strcpy(addr, get_ip(device_name));
-  printf("%s\n", addr);
+  printf("Server address %s\n", addr);
   server = memcached_server_list_append(server, addr, 11211, &rc);
   rc = memcached_server_push(memc, server);
   int interval = atoi(argv[1]);
-  if (rc == MEMCACHED_SUCCESS)
-    fprintf(stderr,"Successfully added server\n");
-  else
+  if (rc != MEMCACHED_SUCCESS)
     fprintf(stderr,"Couldn't add server: %s\n",memcached_strerror(memc, rc));
   memcached_stat_st *stat = (memcached_stat_st *) malloc(sizeof(memcached_stat_st));
   memcached_return_t err;
@@ -265,7 +213,7 @@ int main(int argc, char *argv[]) {
     stat = memcached_stat(memc, NULL, &err);
     stamp = time(NULL);
     // printf("the time is %ld\n", time(NULL));
-    print_all(stat, result_file);
+    if (count % 5 == 0) print_all(stat, result_file);
     stamp = time(NULL) - stamp;
     // fprintf(result_file, "time stamp in sec: %ld\n", time(NULL));
     // fflush(result_file);
@@ -278,7 +226,7 @@ int main(int argc, char *argv[]) {
     // if (count % 2 == 0) {
     proc(result_file);
     // }
-    usleep(500000);
+    usleep(200000);
   }
   fclose(result_file);
   free(stat);

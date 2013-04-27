@@ -126,7 +126,7 @@ int main(int argc, char *argv[])
     /* Update the memcached structure with the updated server list. */
     rc = memcached_server_push(memc, servers);
     if (rc == MEMCACHED_SUCCESS)
-        fprintf(stderr,"Successfully added server\n");
+        // fprintf(stderr,"Successfully added server\n");
     else
         fprintf(stderr,"Couldn't add server: %s\n",memcached_strerror(memc, rc));
     FILE *file = fopen("./key", "r");

@@ -99,6 +99,7 @@ void *initialize(void *arg) {
     char *value = (char *) malloc(5001);
     long thread_id = (long) arg;
     int start = chunk * thread_id;
+    int save = start;
     int end = start + chunk;
 		// printf("thread %d: start: %d, end: %d\n", thread_id, start, end);
     memcached_return rc;
@@ -118,7 +119,8 @@ void *initialize(void *arg) {
 				// printf("thread %d: iteration: %d; key:%d value %d\n", thread_id, start, key_size[start], value_size[start]);
             
         if (start % 500 == 0) {
-          printf("iteration %d\n", start);
+          // printf("iteration %d\n", start);
+          printf("Thread %d finished %d out of %d\n", thread_id, start - save, chunk);
           //fprintf(stderr, "key: %s\n", temp);
           //fprintf(stderr, "value: %s\n", value);
         }
@@ -130,7 +132,7 @@ void *initialize(void *arg) {
         start++;
     }
 
-	printf("thread %d finished\n", thread_id);
+	printf("Thread %d finished\n", thread_id);
     pthread_exit(NULL);
 }
 
@@ -186,9 +188,7 @@ int main(int argc, char *argv[])
     /* Update the memcached structure with the updated server list. */
     for (int i = 0; i < threads_total; i++) {
         rc = memcached_server_push(memc[i], servers);
-        if (rc == MEMCACHED_SUCCESS)
-            fprintf(stderr,"Successfully added server\n");
-        else
+        if (rc != MEMCACHED_SUCCESS)
             fprintf(stderr,"Couldn't add server: %s\n",memcached_strerror(memc[i], rc));
     }
        
@@ -241,9 +241,9 @@ int main(int argc, char *argv[])
     strcpy(value, "done");
     rc = memcached_set(memc[0], temp, strlen(temp), value, strlen(value), (time_t)0, (uint32_t)0);
     if (rc == MEMCACHED_SUCCESS) {
-	fprintf(stderr, "Successfully initialized servers.\n");
+	   fprintf(stderr, "Successfully initialized servers.\n");
     } else {
-	fprintf(stderr, "Failed to set the final key.\n");
+	   fprintf(stderr, "Failed to set the final key.\n");
     }
     fclose(file);
     fclose(value_file);
