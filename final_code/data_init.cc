@@ -186,6 +186,6 @@ int main(int argc, char *argv[])
     }
     fclose(file);
     fclose(value_file);
-    // free(temp);
-    // free(value);
+    free(temp);
+    free(value);
 }

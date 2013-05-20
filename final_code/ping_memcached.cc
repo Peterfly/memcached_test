@@ -16,28 +16,11 @@
 #include <net/if.h>
 #include <signal.h>
 #include <queue>
+
 using namespace std;
 
 static queue<char*> myqueue;
 static FILE *result_file;
-
-static void sigint_handler(int sig)
-{
-    printf("called hanlder!!\n");
-    result_file = fopen("/dev/ramptalk", "w");
-    char *temp = (char *) malloc(60);
-    while (!myqueue.empty())
-    {
-        temp = myqueue.front();
-        // printf("writing\n");
-        fprintf(result_file, temp);
-        myqueue.pop();
-        fflush(result_file);
-    }
-    fclose(result_file);
-    exit(0);
-    return;
-}//sigint_handler
 
 void inline reverse(char *ptr, int size) {
   for (int i = 0; i < (size >> 1); i++) {
@@ -114,7 +97,7 @@ void print_all(memcached_stat_st *stat, FILE *file) {
 
 
 void proc(FILE *result) {
-    static char *copier = (char *) malloc(60 * sizeof(char));
+    char copier[60];
     FILE *fs = fopen("/proc/meminfo", "r");
     char temp[100] = {};
     char x[100] = {};
@@ -122,7 +105,6 @@ void proc(FILE *result) {
     sprintf(copier, "%s%s\n", temp, x);
     // myqueue.push(copier);
     // fprintf(result, "%s", copier);
-    copier = (char *) malloc(60 * sizeof(char));
     
 
     // fprintf(result, "%s%s\n", temp, x);
@@ -131,7 +113,6 @@ void proc(FILE *result) {
     sprintf(copier, "%s%s\n", temp, x);
     fprintf(result, "%s", copier);
     // myqueue.push(copier);
-    copier = (char *) malloc(60 * sizeof(char));
     sprintf(copier, "");
     // (result, "%s%s\n", temp, x);
     // fclose(fs);
@@ -148,7 +129,6 @@ void proc(FILE *result) {
     // printf("copier is %s\n", copier);
     // myqueue.push(copier);
     fprintf(result, "%s", copier);
-    copier = (char *) malloc(60 * sizeof(char));
     fclose(fs);
     // fflush(result);
 }
@@ -206,9 +186,6 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "failed\n");
   }
   time_t stamp;
-  signal(SIGINT, sigint_handler);
-  signal(SIGKILL,sigint_handler);
-  signal(SIGTERM,sigint_handler);
   while (true) {
     stat = memcached_stat(memc, NULL, &err);
     stamp = time(NULL);
@@ -226,6 +203,7 @@ int main(int argc, char *argv[]) {
     // if (count % 2 == 0) {
     proc(result_file);
     // }
+    free(stat);
     usleep(200000);
   }
   fclose(result_file);

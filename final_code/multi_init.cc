@@ -131,7 +131,8 @@ void *initialize(void *arg) {
             fprintf(stderr, "Couldn't store key: %s\n", memcached_strerror(memc[thread_id], rc));
         start++;
     }
-
+    free(temp);
+    free(value);
 	printf("Thread %d finished\n", thread_id);
     pthread_exit(NULL);
 }
