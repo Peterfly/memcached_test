@@ -10,6 +10,7 @@
 #include <ctype.h>
 #include <signal.h>
 #include <execinfo.h>
+#include <queue>
 
 #define HIT_RATE 81
 #define MISS_PENALTY 2
@@ -20,14 +21,30 @@
 
 #define MAX_RETRY 10
 
-#define PING_THREAD 1
+#define PING_THREAD 4
+
+using namespace std;
 
 memcached_server_st *servers[MAX_SERVERS];
 
 struct info{
-  long total;
-  int count;
+    long total;
+    int count;
 };
+
+struct req_stat {
+    short server_id;
+    long latency;
+};
+
+struct ping_stat {
+    int server_id;
+    long duration;
+};
+
+
+queue<ping_stat> ping_queue;
+queue<ping_stat> ready_queue;
 
 pthread_mutex_t segv_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -38,6 +55,11 @@ pthread_mutex_t counter_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t waken_lock = PTHREAD_MUTEX_INITIALIZER;
 
 int bins[MAXTHREADS][35] = {0};
+
+bool servers_seen[MAX_SERVERS];
+timeval* servers_ping_alive = new timeval[MAX_SERVERS];
+long server_spent[MAX_SERVERS];
+
 
 int server_counter = 0;
 
@@ -52,7 +74,10 @@ int num_servers;
 // char results[MAXTHREADS][200];
 long maxes[MAXTHREADS] = {0};
 long mines[MAXTHREADS] = {0};
+
 info* sum = new info[MAXTHREADS];
+
+
 int id_map[MAX_SERVERS] = {-1};
 // float avges[MAXTHREADS];
 bool is_check;
@@ -208,10 +233,10 @@ void *heart_beat(void *arg) {
     // pthread_exit(NULL);
 }
 
-void *ping_alive(void *arg) {
+void *new_ping(void *arg) {
+    uint32_t flags;
     long proxy = (long) arg;
     int start_server =(int) proxy;
-    // printf("ping starts %d\n", start_server);
     memcached_return_t instance_rc;
     int s = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     char temp[252] = {};
@@ -219,78 +244,66 @@ void *ping_alive(void *arg) {
     size_t retlength;
     memcached_return rc;
     char *value = (char *) malloc(5001 * sizeof(char));
-    
+
     while (true) {
-        bool flag = true;
-        // List lock protects picked_servers.
-        for (int ii = 0; ii < num_servers; ii++) {
-						// printf("goto %d\n", ii);
-            int i = ((int) start_server + ii) % num_servers;
-            if (sleeping_servers[i] && !picked_servers[i]) {
-                pthread_mutex_lock(&list_lock);
-                if (!picked_servers[i]) {
-                    picked_servers[i] = true;
-                    flag = false;
-                } else {
-                    continue;
-                }
-                pthread_mutex_unlock(&list_lock);
-                int count = 0;
-                bool proceed = true;
-                const char *hostname= servers[i][0].hostname;
-                in_port_t port= servers[i][0].port;
-                while (!libmemcached_util_ping2(hostname, port,
-                                        NULL, NULL, &instance_rc)) {
-                    printf("ping: %s\n", hostname);
-                    usleep(200000);
-                    count++;
-                    if (count > 0) {
-                        // printf("ping server %s %d times\n", hostname, count);
-                        pthread_mutex_lock(&list_lock);
-                        picked_servers[i] = false;
-                        pthread_mutex_unlock(&list_lock);
-                        proceed = false;
-                        break;
-                    }
-                }
-                if (! proceed) { continue; }
-								else {
-                	pthread_mutex_lock(&waken_lock);
-									sleeping_servers[i] = false;
-									waken_counter++;
-									pthread_mutex_unlock(&waken_lock);
-									strcpy(temp, "done");
-									int howManyTimesPing = 0;
-									do {
-											printf("getting done key %s %d\n", hostname, port);
-											retvalue = memcached_get(memc[0][i], temp, strlen(temp), &retlength, &flags, &rc);
-											// printf("getting value\n");
-											if (rc != MEMCACHED_SUCCESS)
-													fprintf(stderr, "Couldn't get back done key: %s\n", memcached_strerror(memc[0][i], rc));
-											usleep(200000);
-									} while (!(retvalue && (strcmp(temp, retvalue) == 0)));
-									printf("server ip %s port %d is ready\n", hostname, port);  
-									if (retvalue != NULL && (strcmp(temp, retvalue) == 0)) {
-											// printf("Start sampling.\n");
-											pthread_mutex_lock(&counter_lock);
-											waken_servers[server_counter] = i;    
-											server_counter++;
-											pthread_mutex_unlock(&counter_lock);
-											break;
-									}
-								}
-            }
-        }
-        if (flag) {
-            // pthread_mutex_unlock(&list_lock);
-            printf("BREAKING OUT!\n");
+        pthread_mutex_lock(&list_lock);
+        if (ping_queue.empty()) {
+            pthread_mutex_unlock(&list_lock);
             break;
         }
+
+        ping_stat next = ping_queue.front();
+        ping_queue.pop();
+        pthread_mutex_unlock(&list_lock);
+
+        int i = next.server_id;
+        struct timeval start_time, end_time;
+        gettimeofday(&start_time, NULL);
+        const char *hostname = servers[i][0].hostname;
+        in_port_t port= servers[i][0].port;
+        printf("ping: %s\n", hostname);
+        if (!libmemcached_util_ping2(hostname, port,
+                                NULL, NULL, &instance_rc)) {
+            gettimeofday(&end_time, NULL);
+            next.duration += end_time.tv_usec - start_time.tv_usec +
+                1000000 * (end_time.tv_sec - start_time.tv_sec);
+            
+            pthread_mutex_lock(&list_lock);
+            ping_queue.push(next);
+            pthread_mutex_unlock(&list_lock);
+            printf("failed ping: %s\n", hostname);
+            continue;
+        }
+        gettimeofday(&end_time, NULL);
+        next.duration += end_time.tv_usec - start_time.tv_usec +
+            1000000 * (end_time.tv_sec - start_time.tv_sec);
+        long ss = start_time.tv_sec * 1000000 + start_time.tv_usec;
+        long ee = end_time.tv_sec * 1000000 + end_time.tv_usec;        
+        fprintf(latency, "[duration]: %s: %d, %d, %d, %d, %d, %d\n", servers[next.server_id][0].hostname,
+            start_time.tv_sec, start_time.tv_usec, end_time.tv_sec,
+            end_time.tv_usec, ee, next.duration);
+        strcpy(temp, "done");
+        int howManyTimesPing = 0;
+        do {
+            printf("getting done key %s %d\n", hostname, port);
+            retvalue = memcached_get(memc[0][i], temp, strlen(temp), &retlength, &flags, &rc);
+            // printf("getting value\n");
+            if (rc != MEMCACHED_SUCCESS)
+                fprintf(stderr, "Couldn't get back done key: %s\n", memcached_strerror(memc[0][i], rc));
+            usleep(200000);
+        } while (!(retvalue && (strcmp(temp, retvalue) == 0)));
+        printf("server ip %s port %d is ready\n", hostname, port);  
+        pthread_mutex_lock(&waken_lock);
+        ready_queue.push(next);
+        waken_servers[server_counter] = i;
+        server_counter++;
+        pthread_mutex_unlock(&waken_lock);
     }
+    printf("one thread has ended pinging\n");
     free(retvalue);
     free(value);
-    // pthread_exit(NULL);
 }
+
 
 
 int get_id(char *str) {
@@ -312,18 +325,23 @@ int get_id(char *str) {
 }
 
 void *routine(void *arg) {
+    uint32_t flags;
     memcached_return rc;  
     long thread_id = (long) arg;
+    int failed_count = 0;
     int count = 0;
     time_t expire = 0;
     char temp[252] = {};
-    struct timeval before, after;
+    struct timeval before, after, starting, ending;
     long max = 0;
     long min = 2147483647;
     long avg = 0;
     char *retvalue = NULL;
     size_t retlength;
     int miss_count = 0;
+    gettimeofday(&starting, NULL);
+    req_stat* req_record = new req_stat[num_test];
+    long total_retry = 0;
     while (true) {
         if (count % 500 == 0) {
           printf("thread %d finshed %d requests out of %d \n", thread_id, count, num_test);
@@ -336,8 +354,8 @@ void *routine(void *arg) {
             printf("sth wrong with id map %d\n", core_key);
             // continue;
         }*/
+        int retry = 0;
         if (is_hit()) {
-            int retry = 0;
             do {
                 if (count % 3 == 0) {
                     gen_key_del(temp, key_size[count], core_key);
@@ -374,7 +392,7 @@ void *routine(void *arg) {
             } while ((rc == MEMCACHED_TIMEOUT || rc == MEMCACHED_SERVER_TEMPORARILY_DISABLED) && retry < MAX_RETRY);
         } else {
             gen_miss(temp, key_size[count]);
-            int retry = 0;
+            
             do {
                 if (retry == 0) {
                     gettimeofday(&before, NULL);
@@ -394,6 +412,12 @@ void *routine(void *arg) {
             } while ((rc == MEMCACHED_TIMEOUT || rc == MEMCACHED_SERVER_TEMPORARILY_DISABLED) && retry < MAX_RETRY);
         }
 
+        total_retry += retry-1;
+
+        if (retry > 1) {
+            failed_count += 1;
+        }
+
         long t = difftime(before, after);
 
         if (rc != MEMCACHED_SUCCESS && rc != MEMCACHED_NOTFOUND) {
@@ -404,8 +428,8 @@ void *routine(void *arg) {
         if (count == 0) {
             min = t;
             max = t;
-            avg = t;
-        } else {
+        }
+        if (retry == 1) {
             avg += t;
         }
         if (t < min) {
@@ -425,18 +449,29 @@ void *routine(void *arg) {
 
         if (inter_gap[count] > 0)
             usleep(inter_gap[count]);
+        req_record[count].server_id = (short) core_key;
+        req_record[count].latency = t;
         count++;
         maxes[thread_id] = max;
         mines[thread_id] = min;
+
         pthread_mutex_lock (&server_mutexes[thread_id]);
-        sum[thread_id].total = avg;
-        sum[thread_id].count = count;
+        
+        if (retry == 1) {
+            sum[thread_id].total = avg;
+        } else {
+            // if this is a failed requesst
+            // sum[thread_id].total = -1;
+        }
+        sum[thread_id].count = count - failed_count;
+            
         pthread_mutex_unlock (&server_mutexes[thread_id]);
         if (count >= num_test && !is_infi) {
             printf("thread: %d breaking out of the loop, count : %d\n", thread_id, count);
             break;
         }
     }
+    gettimeofday(&ending, NULL);
     // char msg[200] = {};
     // sprintf(msg, "max: %d min: %d avg: %f, count %d\n", max, min, (float)avg/count, count);
     // snprintf(msg, 200, "%d,%d,%f,%d\n", max, min, (float)avg/count, count);
@@ -451,7 +486,7 @@ void *routine(void *arg) {
     // avges[thread_id] = avg/count;
     // quicksort(latency_record, 0, num_test);
     // plot(latency_record);
-    printf("thread %d finishes\n", thread_id);
+    printf("thread %d finishes, printing latency stats\r\n", thread_id);
     /*for (int i = 0; i <= 30; i++) {
         if (i == 0) {
             printf("[Thread %d] bins smaller than 50-> %d\n",
@@ -464,6 +499,13 @@ void *routine(void *arg) {
                 thread_id, (i-1)*5+50, i*5+50, bins[thread_id][i]);
         }
     }*/
+    for (int i = 0; i < num_test; i++) {
+        fprintf(latency, "[latency] %d, %d\r\n", req_record[i].server_id,
+            req_record[i].latency);
+
+    }
+    fprintf(latency, "[thread_summary]: thread %d retry: %d, microsecond: %d\r\n", thread_id, total_retry,
+       difftime(starting, ending));
     pthread_exit(NULL);
 }
 
@@ -473,6 +515,7 @@ void *routine(void *arg) {
 
 int main(int argc, char *argv[])
 {
+    latency = fopen("/dev/ramptalk", "w");
     signal(SIGSEGV, sigsegv_handler);
     time_t expire = 0;
     memcached_return rc;
@@ -494,6 +537,27 @@ int main(int argc, char *argv[])
     }
 
     num_servers = atoi(argv[1]);
+
+    int kunuth_shuffle[MAX_SERVERS] = {0};
+    for (int i = 0; i < num_servers; i++) {
+        kunuth_shuffle[i] = i;
+    }
+    for (int i = 0; i < num_servers; i++) {
+        int target = rand() % num_servers;
+        int temp_swap = kunuth_shuffle[i];
+        kunuth_shuffle[i] = kunuth_shuffle[target];
+        kunuth_shuffle[target] = temp_swap;
+    }
+
+    int target_server = 0;
+    for (int j = 0; j < num_servers; j++) {
+        target_server = kunuth_shuffle[j];
+        ping_stat stat;
+        stat.server_id = target_server;
+        stat.duration = 0;
+        ping_queue.push(stat);
+    }
+
     for (int jj = 0; jj < num_servers; jj++) {
         sleeping_servers[jj] = true;
         picked_servers[jj] = false;
@@ -575,8 +639,8 @@ int main(int argc, char *argv[])
     pthread_t ping_threads[8];
     int ping_times;
     int pp;
-    for (int kk = 0; kk < 8; kk++)
-        pp = pthread_create(&ping_threads[kk], NULL, ping_alive, (void *)(rand() % num_servers));
+    for (int kk = 0; kk < PING_THREAD; kk++)
+        pp = pthread_create(&ping_threads[kk], NULL, new_ping, (void *)(rand() % num_servers));
     while (true) {
         usleep(200);
         // We can start sampling if at least one server is awake.
@@ -588,7 +652,7 @@ int main(int argc, char *argv[])
     char temp[252] = {};
     FILE *myfile = fopen("./key", "r");
     FILE *timeinter = fopen("./inter", "r");
-    latency = fopen("/dev/ramptalk", "w");
+    
 
     pthread_t hb;
     int hh = pthread_create(&hb, NULL, heart_beat, (void *)latency);
@@ -643,7 +707,6 @@ int main(int argc, char *argv[])
     for (long t = 0; t < num_of_threads; t++) {
         pthread_join(threads[t], NULL);
     }
-
     /*for (int i = 0; i <= 30; i++) {
         int sum_of_all = 0;
         for (int j = 0; j < num_of_threads; j++) {
@@ -686,6 +749,17 @@ int main(int argc, char *argv[])
         memcached_free(memc[i][j]);
         // pthread_cancel(threads[i]);
     }
+
+    pthread_mutex_lock(&list_lock);
+    pthread_mutex_lock(&waken_lock);
+    while (!ready_queue.empty()) {
+        ping_stat temp_stat = ready_queue.front();
+        ready_queue.pop();
+        fprintf(latency, "[duration at the end]: %d: %d\r\n", temp_stat.server_id,
+            temp_stat.duration);
+    }
+    pthread_mutex_unlock(&list_lock);
+    pthread_mutex_unlock(&waken_lock);
     pthread_cancel(hb);
     // pthread_cancel(checking);
     fclose(timeinter);
