@@ -96,6 +96,7 @@ int waken_servers[MAX_SERVERS] = {-1};
 pthread_mutex_t server_mutexes[MAX_SERVERS];
 
 char server_addr[MAX_SERVERS][50];
+char alternate_addr[MAX_SERVERS][50];
 
 long difftime(timeval before, timeval after) {
     long diff = (after.tv_usec - before.tv_usec) + (after.tv_sec - before.tv_sec) * 1000000;
@@ -354,6 +355,12 @@ void *routine(void *arg) {
             printf("sth wrong with id map %d\n", core_key);
             // continue;
         }*/
+        if (rand() % 2 == 0) {
+            server_addr[core_key][0] = '2';
+        } else {
+            server_addr[core_key][0] = '1';
+        }
+        printf("sending to addr %s \n", server_addr[core_key]);
         int retry = 0;
         if (is_hit()) {
             do {
@@ -538,6 +545,7 @@ int main(int argc, char *argv[])
 
     num_servers = atoi(argv[1]);
 
+    // Make sure we ping server in a random order
     int kunuth_shuffle[MAX_SERVERS] = {0};
     for (int i = 0; i < num_servers; i++) {
         kunuth_shuffle[i] = i;
@@ -607,6 +615,9 @@ int main(int argc, char *argv[])
     total_addr = num_servers;
     for (int i = 0; i < total_addr; i++) {
         servers[i] = memcached_server_list_append(servers[i], server_addr[i], port, &rc);
+        strcpy(alternate_addr[i], server_addr[i]);
+        alternate_addr[i][0] = '2';
+        servers[i] = memcached_server_list_append(servers[i], alternate_addr[i], port, &rc);
     }
     for (int i = 0; i < num_of_threads; i++){
         for (int j = 0; j < num_servers; j++) {
